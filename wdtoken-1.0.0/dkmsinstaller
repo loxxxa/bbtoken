@@ -1,0 +1,41 @@
+#! /bin/sh
+
+module="wdtoken"
+version="1.0.0"
+
+DKMS=`which dkms 2>/dev/null`
+if [ -n "$DKMS" ] ; then
+case $1 in
+    uninstall)
+        echo "Uninstalling modules from DKMS" >> /tmp/wdinstall.log 2>&1
+        modprobe -r -f -q $module
+        # look for them
+        status=`$DKMS status -m $module -v $version`
+        if echo $status | grep added > /dev/null ||
+            echo $status | grep built > /dev/null ||
+            echo $status | grep installed > /dev/null
+        then
+            $DKMS remove -m $module -v $version --all  >> /tmp/wdinstall.log 2>&1
+        fi
+        exit 0
+    ;;
+    install)
+        echo "Attempting to install using DKMS" > /dev/null
+        if $DKMS add -m $module -v $version > /dev/null &&
+            $DKMS build -m $module -v $version > /dev/null &&
+            $DKMS install -m $module -v $version --force > /dev/null 
+        then
+            modprobe -q $module
+            exit 0
+        fi
+        echo "Failed to install using DKMS"
+        exit 1
+
+    ;;
+    *)
+	echo $"Usage: $0 {start|stop|restart|status|setup}"
+	exit 1
+esac
+fi
+
+exit 1

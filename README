@@ -1,0 +1,26 @@
+================= How to Install ================
+*  You need login as root  *
+*  Make sure that 'dkms', 'gcc', 'binutils', 'make' and the linux kernel headers for your running kernel are installed on your machine.
+   These packages are available on your distribution's installation CD/DVD.  
+   Also, you can install them through the internet, eg: 
+   run "yum install kernel-devel" (Fedora) or "apt-get install linux-headers-`uname -r`"(Ubuntu) COMMAND to install the kernel headers *
+*  To run the BBTokenTool,JRE >= 1.6.0 is required  *
+
+1. Run "install" in TERMINAL to install BB Token Admin Tool
+     eg: # bash /<path>/install
+   
+2. If you had installed it in your system before, you will get a prompt: "The BB Token Tool is exist,do you want to overwrite it? (yes/no)[yes]:", enter "yes" to overwrites or "no" to exit installation.
+
+3. Finish installing
+
+================ How to Run ================
+*  From shortcut in desktop(only root user is available).
+
+*  From applications start menu.Usually,the location is "Applications"->"Other"->"BBTokenTool".
+
+*  Run "watchsafe_bbtoken" in TERMINAL.
+   eg: # watchsafe_bbtoken
+
+=============== How to Uninstall =================
+*  From applications start menu.Usually,the location is "Applications"->"Other"->"UninstallBBTokenTool".
+*  Run "/usr/lib/watchdata/bbtoken/tools/UninstallBBtoken" in TERMINAL.

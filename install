@@ -1,0 +1,349 @@
+#! /bin/sh
+###############################################################################
+#                                                                             #
+#          Description: BB Token Tool for Linux                               #
+#          Copyright (c) 1994-2011 by Watchdata Technologies Pte., Ltd.       #
+#                                                                             #
+###############################################################################
+
+KVER=`uname -r`
+KERNEL_PATH="/lib/modules/$KVER/kernel/drivers/usb"
+BIN_PATH="/usr/lib/watchdata/bbtoken/tools"
+APP_START_DIR="/usr/share/applications"
+JAR_FILE=WatchSAFE.jar
+LIB_FILE=libpkcs11wrapper.so
+#P11_UTIL_LIB=libwdpkcsutil.so
+SERVICE_PATH="/usr/lib/watchdata/wdkserver"
+SERVICE_FILE=WdkmgrServer
+WDDRIVER_FILE=wdtoken-1.0.0
+
+SERVICE_RUN_SH=wd_udk
+START_LINK=S99$SERVICE_RUN_SH
+STOP_LINK=K10$SERVICE_RUN_SH
+
+P11_LIB_PATH="/usr/lib/watchdata/bbtoken/lib"
+P11_LIB_FILE=libwdpkcs_bbtoken.so
+
+UDK_LIB_PATH=$SERVICE_PATH
+UDK_LIB_FILE=libwdkmgrccid.so
+
+OLD_P11_LIB_FILE=$P11_LIB_PATH/$P11_LIB_FILE
+SH_FILE=tool.sh
+OLD_SH_FILE=$BIN_PATH/$SH_FILE
+LN_SH_FILE=/usr/bin/watchsafe_bbtoken
+
+LOGO_PIC_FILE=bbtokentool.png
+DESKTOP_FILE=bbtokentool.desktop
+
+UNINSTALL_PIC_FILE=wdbbtokenuninstall.png
+UNINSTALL_DESKTOP_FILE=wdbbtokenuninstall.desktop
+UNINSTALL_SH_FILE=UninstallBBToken
+
+# p11模块名称
+PKCSUTIL=PKCSUtil
+P11_MODULE_NAME="BB_PKCS#11_Module"
+
+RETVAL=0
+FILELOST=0
+LANGUAGEID=0
+WORK_PATH="$(dirname "$0")"
+SYSTEM_BIT=$($(which getconf) LONG_BIT)
+
+InstallDkms() {
+     if [ "$LANGUAGEID" = "1" ]; then
+        echo Registrando Modulo
+     else 
+        echo "Register Module"
+    fi
+
+    DKMS=`which dkms 2>/dev/null`
+    if [ -n "$DKMS" ]; then
+        $DKMS add -m wdtoken -v 1.0.0 > /dev/null 2>&1 || true
+    else
+         if [ "$LANGUAGEID" = "1" ]; then
+            echo "dkms não está instalado"
+         else
+            echo "dkms not installed"
+         fi
+         RETVAL=1
+         return $RETVAL
+    fi
+}
+
+MakeSH(){
+  echo "#! /bin/sh" > $OLD_SH_FILE
+  echo "cd "$BIN_PATH" " >> $OLD_SH_FILE
+  echo "java -Djava.library.path="$BIN_PATH" -jar "$JAR_FILE >> $OLD_SH_FILE
+  chmod +x $OLD_SH_FILE
+}
+
+CopyFile(){
+    cp -f -p "$WORK_PATH"/bin/$JAR_FILE               $BIN_PATH
+    cp -f -p "$WORK_PATH"/bin/$UNINSTALL_SH_FILE      $BIN_PATH
+    cp -f -p "$WORK_PATH"/bin/$SERVICE_RUN_SH         $SERVICE_PATH
+    cp -f -p "$WORK_PATH"/bin/$SH_FILE         	      $BIN_PATH
+    cp -f -p "$WORK_PATH"/bin/"${SYSTEM_BIT}bit"/$SERVICE_FILE    $SERVICE_PATH
+    cp -f -p "$WORK_PATH"/bin/"${SYSTEM_BIT}bit"/$PKCSUTIL        $BIN_PATH
+    cp -f -p "$WORK_PATH"/lib/"${SYSTEM_BIT}bit"/$LIB_FILE        $BIN_PATH
+#    cp -f -p "$WORK_PATH"/lib/"${SYSTEM_BIT}bit"/$P11_UTIL_LIB    $BIN_PATH
+    cp -f -p "$WORK_PATH"/lib/"${SYSTEM_BIT}bit"/$P11_LIB_FILE    $P11_LIB_PATH
+    cp -f -p "$WORK_PATH"/lib/"${SYSTEM_BIT}bit"/$UDK_LIB_FILE    $UDK_LIB_PATH
+    cp -f -p "$WORK_PATH"/desktop/$LOGO_PIC_FILE          $BIN_PATH
+    cp -f -p "$WORK_PATH"/desktop/$DESKTOP_FILE           $BIN_PATH
+    cp -f -p "$WORK_PATH"/desktop/$UNINSTALL_PIC_FILE     $BIN_PATH
+    cp -f -p "$WORK_PATH"/desktop/$UNINSTALL_DESKTOP_FILE $BIN_PATH
+    cp -R -p "$WORK_PATH"/$WDDRIVER_FILE /usr/src/
+        
+    chmod a+x "$BIN_PATH"/$UNINSTALL_SH_FILE
+    chmod a+x "$SERVICE_PATH"/$SERVICE_RUN_SH
+	chmod a+x "$BIN_PATH"/$PKCSUTIL
+    chmod a+x "$OLD_SH_FILE"
+}
+
+### add desktop link
+AddShortcut(){
+
+#XDDM=`which xdg-desktop-menu 2>/dev/null`
+#if [ -n "$XDDM" ]; then
+#   $XDDM install --novendor $BIN_PATH/bbtokentool.desktop
+#   $XDDM install --novendor $BIN_PATH/wdbbtokenuninstall.desktop
+#else
+    ln -s -f $BIN_PATH/bbtokentool.desktop $APP_START_DIR/
+    ln -s -f $BIN_PATH/wdbbtokenuninstall.desktop $APP_START_DIR/
+#fi
+    ln -s -f $OLD_SH_FILE $LN_SH_FILE
+}
+
+### add service 
+AddRunLevel(){
+for ADDRUNLEVEL in `find /etc/ -name "rc[2345].d" -type d`;
+do
+    echo "ADDRUNLEVEL=$ADDRUNLEVEL"
+    if [ -d $ADDRUNLEVEL ] ; then
+        ln -sf $SERVICE_PATH/$SERVICE_RUN_SH $ADDRUNLEVEL/$START_LINK
+        chmod a+x $ADDRUNLEVEL/$START_LINK
+    fi
+done
+
+for ADDSTOPLEVEL in `find /etc/ -name "rc[016].d" -type d`;
+do
+    echo "ADDSTOPLEVEL=$ADDSTOPLEVEL"
+    if [ -d $ADDSTOPLEVEL ] ; then
+        ln -sf $SERVICE_PATH/$SERVICE_RUN_SH $ADDSTOPLEVEL/$STOP_LINK
+        chmod a+x $ADDSTOPLEVEL/$STOP_LINK
+    fi
+done
+}
+
+AddService(){
+if [ -d /etc/init.d ]
+then
+    ln -sf $SERVICE_PATH/wd_udk /etc/init.d/
+    service wd_udk setup
+elif [ -d /etc/rc.d ]
+then
+    ln -sf $SERVICE_PATH/wd_udk /etc/rc.d/
+    service wd_udk setup
+else
+    $SERVICE_PATH/wd_udk setup
+fi
+
+if [ "$?" != "0" ]; then
+    if [ "$LANGUAGEID" = "1" ]; then
+        echo "A instalação foi terminada.Pressione qualquer tecla para continuar..."
+    else
+         echo "Installation has been terminated.Press any key to continue..."
+    fi
+
+    rm -f $LN_SH_FILE
+    rm -f /etc/init.d/wd_udk
+    rm -f /etc/rc.d/wd_udk
+    rm -rf "$BIN_PATH"
+    rm -rf /usr/src/"$WDDRIVER_FILE"
+    read RESP
+    exit $?
+fi
+
+CHK=/sbin/chkconfig
+URD=/usr/sbin/update-rc.d
+if [ -f "$CHK" ]; then
+    $CHK --add wd_udk
+elif [ -f "$URD" ] ; then
+    $URD wd_udk start 99 2 3 4 5 . stop 10 0 1 6 . 
+else
+    AddRunLevel
+fi
+}
+
+CheckFile(){
+if [ ! -f "$WORK_PATH"/bin/$JAR_FILE -o ! -f "$WORK_PATH"/lib/"${SYSTEM_BIT}bit"/$LIB_FILE -o ! -f "$WORK_PATH"/lib/"${SYSTEM_BIT}bit"/$P11_LIB_FILE -o ! -f "$WORK_PATH"/lib/"${SYSTEM_BIT}bit"/$UDK_LIB_FILE -o ! -d "$WORK_PATH"/$WDDRIVER_FILE ]; then
+    FILELOST=1
+    return $FILELOST
+fi
+if [ ! -f "$WORK_PATH"/bin/"${SYSTEM_BIT}bit"/$SERVICE_FILE -o ! -f "$WORK_PATH"/bin/$SERVICE_RUN_SH -o ! -f "$WORK_PATH"/desktop/$LOGO_PIC_FILE -o ! -f "$WORK_PATH"/desktop/$DESKTOP_FILE ]; then
+    FILELOST=1
+    return $FILELOST
+fi
+
+if [ ! -f "$WORK_PATH"/desktop/$UNINSTALL_PIC_FILE -o ! -f "$WORK_PATH"/desktop/$UNINSTALL_DESKTOP_FILE -o ! -f "$WORK_PATH"/bin/$UNINSTALL_SH_FILE ]; then
+    FILELOST=1
+    return $FILELOST
+fi
+}
+
+MakeBinSH(){
+if [ -L $LN_SH_FILE -o -f $LN_SH_FILE ]; then
+  echo "Sobrescrever ["$LN_SH_FILE"]? (yes/no)[no]:"
+  read OVERWRITE_SH
+
+  case "$OVERWRITE_SH" in
+  y|Y|yes|Yes|YEs|YES|yEs|yeS|YeS)
+    OVERWRITE="yes"
+    ;;
+  *)
+    OVERWRITE="no"
+    ;;
+ esac
+else
+  OVERWRITE="yes"
+fi
+
+if [ $OVERWRITE = "yes" ]; then
+  ln -sf $OLD_SH_FILE $LN_SH_FILE
+fi
+}
+
+## Check current language. Set en_US.utf8 to default
+CheckLang(){
+lang=${LANG}
+LANGST=${lang%%.*}
+PTLANG1="pt_BR"
+PTLANG2="pt_PT"
+if [ ${PTLANG1} = ${LANGST} -o ${PTLANG2} = ${LANGST} ]
+    then
+        LANGUAGEID=1
+else
+        LANGUAGEID=0
+fi
+}
+
+CheckPre(){
+if [ `id | awk '{print $1}'` != "uid=0(root)" ]; then
+    if [ "$LANGUAGEID" = "1" ]; then
+        echo  -n "Permissão Negada.É necessário fazer login como root para realizar a operação."
+        echo "Pressione qualquer tecla para continuar..."
+    else
+        echo -n "Permission denied.You should login as root to do this operation."
+        echo "Press any key to continue..."
+    fi
+
+read RESP
+exit 1
+fi
+}
+
+CheckDir(){
+if [ ! -d $SERVICE_PATH ] ; then
+    mkdir -p $SERVICE_PATH
+fi
+if [ ! -d $BIN_PATH ] ; then
+    mkdir -p $BIN_PATH
+fi
+if [ ! -d $P11_LIB_PATH ]; then
+    mkdir -p $P11_LIB_PATH
+fi
+if [ ! -d $APP_START_DIR ] ; then
+    mkdir -p $APP_START_DIR
+fi
+}
+
+CheckOldVersion(){
+if [ -d "$BIN_PATH" -a -f "$BIN_PATH"/$JAR_FILE -a -f $LN_SH_FILE ]; then
+    if [ "$LANGUAGEID" = "1" ]; then
+        echo -n "BB Token Tool é existir, quer substituí-lo? (yes/no)[no]:"
+    else
+        echo -n "BB Token Tool is exist,do you want to overwrite it? (yes/no)[no]:"
+    fi
+
+    read COVER_OLD
+	  
+    case "$COVER_OLD" in 
+    y|Y|yes|Yes|YEs|YES|yEs|yeS|YeS)
+    COVER_OLD="yes"
+    ;;
+    *)
+    COVER_OLD="no"
+    ;;
+    esac
+else
+  COVER_OLD="nothing"
+fi
+
+if [ $COVER_OLD = "yes" ]; then
+    "$WORK_PATH"/bin/$UNINSTALL_SH_FILE "overwrite"
+elif [ $COVER_OLD = "no" ]; then 
+    if [ "$LANGUAGEID" = "1" ]; then
+        echo "A instalação foi cancelada.Pressione qualquer tecla para continuar..."
+    else
+        echo "Installation has been canceled.Press any key to continue..."
+    fi
+
+    read RESP
+    exit 0
+fi
+}
+
+clear
+CheckLang
+CheckPre
+CheckOldVersion
+CheckFile
+
+if [ "$FILELOST" = "1" ]; then
+    if [ "$LANGUAGEID" = "1" ]; then
+        echo  -n "Arquivo(s) não encontrado(s).Por favor, verifique o pacote de instalação."
+        echo "Pressione qualquer tecla para continuar..."
+    else
+        echo -n "File(s) missing.Please check the installation package."
+        echo "Press any key to continue..." 
+    fi
+
+read RESP
+exit 1
+fi
+
+InstallDkms
+
+if [ "$RETVAL" != "0" ]; then
+    if [ "$LANGUAGEID" = "1" ]; then
+        echo "A instalação foi terminada.Pressione qualquer tecla para continuar..."
+    else
+        echo "Installation has been terminated.Press any key to continue..."
+    fi
+
+    read RESP
+    exit $RETVAL
+fi
+
+CheckDir
+CopyFile
+#MakeSH
+
+#MakeBinSH
+
+AddService
+AddShortcut
+
+# Add PKCS#11 Module
+"$BIN_PATH"/$PKCSUTIL -add "$P11_MODULE_NAME" "$P11_LIB_PATH"/$P11_LIB_FILE
+
+#echo "Instalação está completa, por favor execute o comando  “/usr/bin/watchsafe_bbtoken” para iniciar."
+if [ "$LANGUAGEID" = "1" ]; then
+    echo "Instalação está completa.Pressione qualquer tecla para continuar..."
+else
+    echo "Install completed.Press any key to continue..."
+fi
+
+read RESP
+clear
+exit 0

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Categories=Application;Other;
+Encoding=UTF-8
+Type=Application
+Name=UninstallBBTokenTool
+Comment=Uninstall BB Token Admin Tool
+Exec=/usr/lib/watchdata/bbtoken/tools/UninstallBBToken
+Icon=/usr/lib/watchdata/bbtoken/tools/wdbbtokenuninstall.png
+StartupNotify=false
+Terminal=true

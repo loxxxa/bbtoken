@@ -1,0 +1,210 @@
+#! /bin/bash
+
+PATH=/sbin:/usr/sbin:/bin:/usr/bin:/usr/local/sbin:/usr/local/bin
+KVER=`uname -r`
+KERNEL_PATH="/lib/modules/$KVER/kernel/drivers/usb"
+INSTALL_PATH="/usr/lib/watchdata/bbtoken"
+WD_PATH="/usr/lib/watchdata"
+SERVICE_PATH="/usr/lib/watchdata/wdkserver"
+BIN_PATH="${INSTALL_PATH}"/tools
+LIB_BIN_PATH="${INSTALL_PATH}"/lib
+APP_START_DIR=/usr/share/applications
+SERVICE_RUN_SH=wd_udk
+START_LINK=S99$SERVICE_RUN_SH
+STOP_LINK=K10$SERVICE_RUN_SH
+FLAG=$1
+LANGUAGEID=1
+
+module="wdtoken"
+version="1.0.0"
+
+# p11模块名称
+PKCSUTIL=PKCSUtil
+P11_MODULE_NAME="BB_PKCS#11_Module"
+
+## Check current language. Set pt_BR.utf8 to default
+lang=${LANG}
+LANGST=${lang%%.*}
+PTLANG1="pt_BR"
+PTLANG2="pt_PT"
+if [ $PTLANG1 = ${LANGST} -o $PTLANG2 = ${LANGST} ]; then
+    LANGUAGEID=1
+else
+    LANGUAGEID=0
+fi
+
+RemoveRunLevel(){
+for ADDRUNLEVEL in `find /etc/ -name "rc[2345].d" -type d`;
+do
+    echo "ADDRUNLEVEL=$ADDRUNLEVEL"
+    if [ -f $ADDRUNLEVEL/$START_LINK ] ; then
+        rm -f $ADDRUNLEVEL/$START_LINK
+    fi
+done
+
+for ADDSTOPLEVEL in `find /etc/ -name "rc[016].d" -type d`;
+do
+    echo "ADDSTOPLEVEL=$ADDSTOPLEVEL"
+    if [ -f $ADDSTOPLEVEL/$STOP_LINK ] ; then
+        rm -f $ADDSTOPLEVEL/$STOP_LINK
+    fi
+done
+}
+
+KillAdminTool() {
+### close admin tool if it's running
+RUNJAR=`ps -ef | grep WatchSAFE.jar | grep -v grep | awk '{print $2}'`
+if [ "x${RUNJAR}" != "x" ]
+    then
+        kill -9 ${RUNJAR} >> /dev/null 2>&1
+fi
+###
+}
+
+RemoveServer() {
+killall -9 "${SERVICE_PATH}"/WdkmgrServer >> /dev/null 2>&1
+
+CHK=/sbin/chkconfig
+URD=/usr/sbin/update-rc.d
+if [ -f "$CHK" ]; then
+    $CHK --del wd_udk
+elif [ -f "$URD" ]; then
+    $URD -f wd_udk remove 
+else
+    RemoveRunLevel
+fi
+
+if [ -f /etc/init.d/$SERVICE_RUN_SH ]
+then
+    service wd_udk stop
+    rm -f /etc/init.d/$SERVICE_RUN_SH
+elif [ -f /etc/rc.d/$SERVICE_RUN_SH ]
+then
+    service wd_udk stop
+    rm -f /etc/init.d/$SERVICE_RUN_SH
+else
+    $SERVICE_PATH/wd_udk stop
+fi
+}
+
+RemoveDriver(){
+if [ -d /usr/src/$module-$version ];then
+    if [ -f /usr/src/"$module-$version"/dkmsinstaller ]; then
+        /usr/src/"$module-$version"/dkmsinstaller uninstall
+    fi
+
+    rm -rf /usr/src/"$module-$version"
+fi
+}
+
+PostRemove(){
+#XDDM=`which xdg-desktop-menu 2>/dev/null`
+#if [ -n "$XDDM" ]; then
+#   $XDDM uninstall bbtokentool.desktop
+#   $XDDM uninstall wdbbtokenuninstall.desktop
+#else
+    rm -f "${APP_START_DIR}"/bbtokentool.desktop
+    rm -f "${APP_START_DIR}"/wdbbtokenuninstall.desktop
+#fi
+
+rm -rf "${LIB_BIN_PATH}"/libwdpkcs_bbtoken.so
+rmdir --ignore-fail-on-non-empty "${LIB_BIN_PATH}"
+
+rm -rf "${BIN_PATH}"/PKCSUtil
+rm -rf "${BIN_PATH}"/WatchSAFE.jar
+rm -rf "${BIN_PATH}"/tool.sh
+rm -rf "${BIN_PATH}"/libpkcs11wrapper.so
+rm -rf "${BIN_PATH}"/wdbbtokenuninstall.*
+rm -rf "${BIN_PATH}"/bbtokentool.*
+rm -rf "${BIN_PATH}"/UninstallBBToken
+rmdir --ignore-fail-on-non-empty "${BIN_PATH}"
+
+rm -f /usr/bin/watchsafe_bbtoken
+}
+
+#统计子目录个数
+CountDirs(){
+	i=0
+	for dir in $1/*
+	do
+		if [ -d $dir ]; then
+			let "i++"
+		fi
+	done
+	return $i
+}
+
+
+
+if [ "$FLAG" != "overwrite" ]; then
+    clear
+    if [ "$LANGUAGEID" = "1" ]; then
+        echo -n "Deseja  desinstalar BBTokenTool? yes or no[no]: "
+    else
+        echo -n "Do you want to uninstall BBTokenTool? (yes/no)[no]:"
+    fi
+
+    read IF_UNINSTALL
+
+   case "$IF_UNINSTALL" in
+      y|Y|yes|Yes|YEs|YES|yEs|yeS|YeS)
+        IF_UNINSTALL="yes"
+        ;;
+      *)
+        IF_UNINSTALL="no"
+        ;;
+    esac
+
+    if [ $IF_UNINSTALL = "no" ];
+       then
+            exit 0
+    fi
+fi
+
+if [ `id | awk '{print $1}'` != "uid=0(root)" ]; then
+    if [ "$LANGUAGEID" = "1" ]; then
+        echo  -n "Permissão Negada.É necessário fazer login como root para realizar a operação."
+        echo "Pressione qualquer tecla para continuar..."
+    else
+        echo  "Permission denied.Please login as root to do the operation.Press any key to continue..."
+    fi
+
+    read RESP
+    exit 0
+fi
+
+
+# Delete PKCS#11 Module
+"${BIN_PATH}"/$PKCSUTIL -del "${P11_MODULE_NAME}"
+
+KillAdminTool
+PostRemove
+
+#rm -rf "${BIN_PATH}"/UninstallBBToken
+#rm -rf "${INSTALL_PATH}"
+rmdir --ignore-fail-on-non-empty "${INSTALL_PATH}"
+
+#如果watchdata主目录下只剩下一个wdkserver目录，就卸载服务和驱动
+CountDirs $WD_PATH
+if [ $? -le 1 ]; then
+	echo "remove WdkMgrServer service ..."
+	RemoveServer
+	RemoveDriver
+	rm -fr $SERVICE_PATH
+fi
+
+#清理watchdata主目录
+CountDirs $WD_PATH
+if [ $? -le 0 ]; then
+	rm -fr $WD_PATH
+fi
+
+if [ "$FLAG" != "overwrite" ]; then
+    if [ "$LANGUAGEID" = "1" ]; then
+        echo "Desinstalar BBTokenTool sucesso."
+    else
+        echo "Uninstall BBTokenTool successfully."
+    fi
+fi
+
+exit 0

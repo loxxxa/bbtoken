@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Encoding=UTF-8
+Description=BB Token Admin Tool for linux
+Type=Application
+Name=BBTokenTool
+Comment=BB Token Admin Tool
+Categories=Application;Other;
+Exec=/usr/bin/watchsafe_bbtoken
+Icon=/usr/lib/watchdata/bbtoken/tools/bbtokentool.png
+StartupNotify=false
+Terminal=false

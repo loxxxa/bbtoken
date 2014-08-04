@@ -1,0 +1,149 @@
+#! /bin/sh
+### BEGIN INIT INFO
+# Provides:         wd_udk 
+# Required-Start:
+# Required-Stop:     
+# Default-Start:    2 3 4 5 
+# Default-Stop:     0 1 6
+# Short-Description: wdtokenmgrservice.
+# Description:      Watchdata token manager service.
+### END INIT INFO
+
+RETVAL=0
+prog="WdkmgrServer"
+_ARCH=3
+
+var=`uname -r`
+SERVICE_PATH="/usr/lib/watchdata/wdkserver"
+MODPROBE=`which modprobe`
+MODULE=wdtoken
+VERSION=1.0.0
+DKMSINSTALLER="/usr/src/${MODULE}-${VERSION}/dkmsinstaller"
+
+if [ -f /lib/init/vars.sh ]; then
+    . /lib/init/vars.sh
+fi
+
+if [ -f /lib/lsb/init-functions ] ; then
+### LSB
+    . /lib/lsb/init-functions
+    _ARCH=1
+elif [ -f /etc/init.d/functions ] ; then
+### RHAT
+    . /etc/init.d/functions
+    _ARCH=2
+else
+    _ARCH=3
+    echo "Unknown arch."
+fi
+
+
+# setup_script
+setup()
+{
+    echo "Uninstalling DKMS kernel modules"  >> /tmp/wdinstall.log 2>&1
+    if [ ! -f $DKMSINSTALLER ]; then
+        RETVAL=1
+        return $RETVAL
+    fi
+    chmod +x $DKMSINSTALLER
+    $DKMSINSTALLER uninstall
+    echo "Installing kernel modules using DKMS"  >> /tmp/wdinstall.log 2>&1
+    $DKMSINSTALLER install
+    if [ "$?" = "0" ]; then
+      echo "Creating kernel modules"  >> /tmp/wdinstall.log 2>&1
+    else
+      RETVAL=$?
+      return $RETVAL
+    fi
+}
+
+start() {
+# Start daemons.
+echo -n "Starting $prog: "
+if ! $MODPROBE --show wdtoken > /dev/null 2>&1 ; then
+	setup
+else
+    vermagic=`modinfo wdtoken | grep vermagic | awk '{print $2}'`
+    if [ "$vermagic" != "$var" ]; then
+        setup
+    fi
+fi
+
+RUNBIN=`ps -ef | grep $prog | grep -v grep | awk '{print $2}'`
+if [ "x$RUNBIN" != "x" ]; then
+    RETVAL=$?
+    return $RETVAL
+fi
+
+if [ "$_ARCH" = "1" ]; then
+        start_daemon "${SERVICE_PATH}"/${prog}
+elif [ "$_ARCH" = "2" ]; then
+        daemon "${SERVICE_PATH}"/${prog}
+else
+        "${SERVICE_PATH}"/${prog}
+fi
+
+RETVAL=$?
+return $RETVAL
+}
+
+stop() {
+# Stop daemons.
+echo -n "Shutting down $prog: "
+RUNBIN=`ps -ef | grep $prog | grep -v grep | awk '{print $2}'`
+
+if [ "x$RUNBIN" = "x" ]; then
+    RETVAL=$?
+    return $RETVAL
+fi
+
+if [ "$_ARCH" = "2" ]; then
+        killproc $prog
+else
+        kill -9 `pidof WdkmgrServer`
+fi
+       
+RETVAL=$?
+return $RETVAL
+}
+
+# See how we were called.
+
+case "$1" in
+  start)
+        start
+        ;;
+
+  stop)
+        stop
+        ;;
+
+  restart|reload)
+        stop
+        start
+        RETVAL=$?
+        ;;
+
+  status)
+        status $prog 
+        RETVAL=$?
+        ;;
+  setup)
+	stop
+        setup
+        RETVAL=$?
+        if [ "$RETVAL" != "0" ]; then
+            exit $RETVAL
+        fi
+	start
+        ;;
+
+  *)
+
+        echo "Usage: $0 {start|stop|restart|status}"
+        exit 1
+esac
+
+
+exit $RETVAL
