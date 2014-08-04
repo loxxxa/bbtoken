@@ -21,6 +21,7 @@ char kernel_version[]={9};//UTS_RELEASE;
 #include <linux/poll.h>
 #include <linux/init.h>
 #include <linux/slab.h>
+#include <linux/wait.h>
 
 //设定各个长度
 //#include "../include/usbkeydrv.h"
@@ -213,7 +214,7 @@ struct usbreader_state {
 	struct semaphore	sem;			/* locks this struct */
 	char			*buf;				/* buffer for I/O */
 	/* always valid */
-	wait_queue_head_t	wait;			/* for timed waits */
+	wait_queue_head_t	queue;			/* for timed waits */
 	int open_count;							/* if open 使得多个应用可以同时打开Key*/
 	int present;						/* Device is present on the bus */
 	int share_mode;
@@ -222,6 +223,8 @@ struct usbreader_state {
 	unsigned char button[8];
 	int irqState;						//irq标志
 	int iLastCommand;					//记录最后一次的命令,用于ccid的复位命令加上正确返回值
+
+
 };
 
 //#################################################################################################
@@ -351,6 +354,9 @@ static ssize_t WD_read (struct file *file,char *buf, size_t len, loff_t *ppos){
 	short			need_len = 0;
 	usbreader = (struct usbreader_state *) file->private_data;
 
+	DEFINE_WAIT(wait);
+
+
 	switch(usbreader->DeviceType ){
 		case DEVICE_TYPE_CRWVIII:
 		case DEVICE_TYPE_USBKEY_ST:
@@ -454,7 +460,10 @@ static ssize_t WD_read (struct file *file,char *buf, size_t len, loff_t *ppos){
 			break;
 		}
 need_sleep:
-		interruptible_sleep_on_timeout (&usbreader->wait, RETRY_TIMEOUT);
+
+                prepare_to_wait(&usbreader->queue, &wait, TASK_INTERRUPTIBLE);
+                schedule_timeout(RETRY_TIMEOUT);
+                finish_wait(&usbreader->queue, &wait);
 
 		//dbg ("read (%d) - retry", len);
 	}//for 
@@ -483,6 +492,7 @@ static ssize_t WD_write (struct file *file,	const char *buf, size_t len, loff_t 
 	char T1_ResetCommand[]={0x00,0x12,0x00,0x00,0x00};
 	char ccid_ResetCommand[]={PC_to_RDR_IccPowerOn,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00};
 
+	DEFINE_WAIT(wait);
 
 	usbreader = (struct usbreader_state *) file->private_data;
 
@@ -608,7 +618,11 @@ static ssize_t WD_write (struct file *file,	const char *buf, size_t len, loff_t 
 					bytes_written = -ETIME;
 					goto done;
 				}
-				interruptible_sleep_on_timeout (&usbreader->wait,RETRY_TIMEOUT);
+
+				prepare_to_wait(&usbreader->queue, &wait, TASK_INTERRUPTIBLE);
+				schedule_timeout(RETRY_TIMEOUT);
+				finish_wait(&usbreader->queue, &wait);
+
 				continue;
 			}else{
 				bytes_written = -EFAULT;
@@ -841,7 +855,8 @@ static int WD_probe (struct usb_interface *udev, const struct usb_device_id *id)
 #endif
 	//设置该设备的一些属性
 	init_MUTEX(&(usbreader->sem));
-	init_waitqueue_head (&usbreader->wait);
+//	init_waitqueue_head (&usbreader->wait);
+//	preepare_to_wait(q, &usbreader->wait, TASK_INTERRUPTIBLE);
 	usbreader->dev = dev;
 
 	usb_set_intfdata (udev,usbreader);
